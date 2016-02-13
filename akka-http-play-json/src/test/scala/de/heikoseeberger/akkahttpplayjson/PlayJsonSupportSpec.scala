@@ -30,7 +30,10 @@ object PlayJsonSupportSpec {
 
   case class Foo(bar: String)
 
+  case class MyValueType(value: String) extends AnyVal
+
   implicit val fooFormat = Json.format[Foo]
+  implicit val myValueTypeFormat = Json.format[MyValueType]
 }
 
 class PlayJsonSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
@@ -49,16 +52,11 @@ class PlayJsonSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll 
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
     }
 
-    "not provide nonsensical marshaller for Future[Unit]" in {
-      val exceptionFromFuture = new RuntimeException
-      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
-
-      assertTypeError("""
-        val e = intercept[RuntimeException] {
-          Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
-        }
-        assert(e == exceptionFromFuture)
-      """)
+    "support marshalling future value types" in {
+      val value = MyValueType("a value")
+      val entityFromPlain = Await.result(Marshal(value).to[RequestEntity], 100.millis)
+      val entityFromFuture = Await.result(Marshal(Future(value)).to[RequestEntity], 100.millis)
+      entityFromFuture shouldBe entityFromPlain
     }
   }
 

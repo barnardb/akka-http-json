@@ -29,7 +29,7 @@ import scala.concurrent.duration.{ Duration, DurationInt }
 object Json4sSupportSpec {
   case class Foo(bar: String)
 
-  class MyValueType(val value: String) extends AnyVal
+  case class MyValueType(value: String) extends AnyVal
 }
 
 class Json4sSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
@@ -57,40 +57,33 @@ class Json4sSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
     }
 
-    "not provide nonsensical marshalling for Future[Unit]" in {
+    "not support marshalling future value types because it does not support marshalling value types" in {
       implicit val serialization = native.Serialization
 
-      val exceptionFromFuture = new RuntimeException
-      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
+      val value = MyValueType("a value")
+      assertTypeError("""Marshal(value).to[RequestEntity]""")
 
-      // Without Json4sSupportProtection, this would compile and fail
+      val futureValue = Future(value)
+      // Without Json4sSupportProtection, this would compile
+      assertTypeError("""Marshal(futureValue).to[RequestEntity]""")
+
+      /**
+       * Without Json4sSupportProtection,
+       * Json4sSupport would provide an undesirable marshaller for Future[MyValueType],
+       * and this test snippet would compile,
+       * and if it were removed from the assertTypeError("""…""") wrapper and the test run,
+       * the runtime exception would not get thrown and intercepted.
+       *
+       * We don't want that confusing behaviour.
+       * To avoid it, we make sure there is a type error.
+       * Really we want to "assert passes if compiles"; since we can't make it pass, we make it not compile.
+       */
       assertTypeError("""
         val e = intercept[RuntimeException] {
           Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
         }
         assert(e == exceptionFromFuture)
       """)
-    }
-
-    "not provide nonsensical marshalling for Future of custom value type" in {
-      implicit val serialization = native.Serialization
-
-      val exceptionFromFuture = new RuntimeException
-      val failedFutureUnit = Future.failed[MyValueType](exceptionFromFuture)
-
-      // Without Json4sSupportProtection, this would compile and fail
-      assertTypeError("""
-        val e = intercept[RuntimeException] {
-          Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
-        }
-        assert(e == exceptionFromFuture)
-      """)
-    }
-
-    "not provide nonsensical unmarshalling for Future[Unit]" in {
-      implicit val serialization = jackson.Serialization
-      val entity: RequestEntity = null
-      assertTypeError("""Unmarshal(entity).to[scala.concurrent.Future[Unit]]""")
     }
 
   }

@@ -27,6 +27,8 @@ import scala.concurrent.duration.{ Duration, DurationInt }
 
 object ArgonautSupportSpec {
   case class Foo(bar: String)
+
+  case class MyValueType(value: String) extends AnyVal
 }
 
 class ArgonautSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
@@ -49,14 +51,14 @@ class ArgonautSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll 
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
     }
 
-    "not interfere with Future unwrapping for Unit" in {
-      val exceptionFromFuture = new RuntimeException
-      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
+    "support marshalling future value types" in {
+      import argonaut.Argonaut._
+      implicit def MyValueTypeCodec = casecodec1(MyValueType.apply, MyValueType.unapply)("bar")
 
-      val e = intercept[RuntimeException] {
-        Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
-      }
-      assert(e == exceptionFromFuture)
+      val value = MyValueType("a value")
+      val entityFromPlain = Await.result(Marshal(value).to[RequestEntity], 100.millis)
+      val entityFromFuture = Await.result(Marshal(Future(value)).to[RequestEntity], 100.millis)
+      entityFromFuture shouldBe entityFromPlain
     }
   }
 

@@ -21,9 +21,14 @@ import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model.RequestEntity
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
+import de.heikoseeberger.akkahttpupickle.UpickleSupportSpec.MyValueType
 import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
 import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration.{ Duration, DurationInt }
+
+object UpickleSupportSpec {
+  case class MyValueType(value: String) extends AnyVal
+}
 
 class UpickleSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
   import UpickleSupport._
@@ -42,14 +47,11 @@ class UpickleSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
     }
 
-    "not interfere with Future unwrapping for Unit" in {
-      val exceptionFromFuture = new RuntimeException
-      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
-
-      val e = intercept[RuntimeException] {
-        Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
-      }
-      assert(e == exceptionFromFuture)
+    "support marshalling future value types" in {
+      val value = MyValueType("a value")
+      val entityFromPlain = Await.result(Marshal(value).to[RequestEntity], 100.millis)
+      val entityFromFuture = Await.result(Marshal(Future(value)).to[RequestEntity], 100.millis)
+      entityFromFuture shouldBe entityFromPlain
     }
   }
 
