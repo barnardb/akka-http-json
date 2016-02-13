@@ -23,7 +23,7 @@ import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
 import play.api.libs.json.Json
-import scala.concurrent.Await
+import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration.{ Duration, DurationInt }
 
 object PlayJsonSupportSpec {
@@ -47,6 +47,18 @@ class PlayJsonSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll 
       val foo = Foo("bar")
       val entity = Await.result(Marshal(foo).to[RequestEntity], 100.millis)
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
+    }
+
+    "not provide nonsensical marshaller for Future[Unit]" in {
+      val exceptionFromFuture = new RuntimeException
+      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
+
+      assertTypeError("""
+        val e = intercept[RuntimeException] {
+          Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
+        }
+        assert(e == exceptionFromFuture)
+      """)
     }
   }
 

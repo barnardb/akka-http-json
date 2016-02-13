@@ -23,11 +23,13 @@ import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import org.json4s.{ DefaultFormats, jackson, native }
 import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
-import scala.concurrent.Await
+import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration.{ Duration, DurationInt }
 
 object Json4sSupportSpec {
   case class Foo(bar: String)
+
+  class MyValueType(val value: String) extends AnyVal
 }
 
 class Json4sSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
@@ -55,15 +57,40 @@ class Json4sSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
     }
 
-    "disable marshalling for futures" in {
-      implicit val serialization = jackson.Serialization
-      assertDoesNotCompile("""Marshal(scala.concurrent.Future(())).to[RequestEntity]""")
+    "not provide nonsensical marshalling for Future[Unit]" in {
+      implicit val serialization = native.Serialization
+
+      val exceptionFromFuture = new RuntimeException
+      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
+
+      // Without Json4sSupportProtection, this would compile and fail
+      assertTypeError("""
+        val e = intercept[RuntimeException] {
+          Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
+        }
+        assert(e == exceptionFromFuture)
+      """)
     }
 
-    "disable unmarshalling for futures" in {
+    "not provide nonsensical marshalling for Future of custom value type" in {
+      implicit val serialization = native.Serialization
+
+      val exceptionFromFuture = new RuntimeException
+      val failedFutureUnit = Future.failed[MyValueType](exceptionFromFuture)
+
+      // Without Json4sSupportProtection, this would compile and fail
+      assertTypeError("""
+        val e = intercept[RuntimeException] {
+          Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
+        }
+        assert(e == exceptionFromFuture)
+      """)
+    }
+
+    "not provide nonsensical unmarshalling for Future[Unit]" in {
       implicit val serialization = jackson.Serialization
       val entity: RequestEntity = null
-      assertDoesNotCompile("""Unmarshal(entity).to[scala.concurrent.Future[Unit]]""")
+      assertTypeError("""Unmarshal(entity).to[scala.concurrent.Future[Unit]]""")
     }
 
   }

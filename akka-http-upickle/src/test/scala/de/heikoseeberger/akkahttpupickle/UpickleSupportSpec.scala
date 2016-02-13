@@ -22,7 +22,7 @@ import akka.http.scaladsl.model.RequestEntity
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import org.scalatest.{ BeforeAndAfterAll, Matchers, WordSpec }
-import scala.concurrent.Await
+import scala.concurrent.{ Await, Future }
 import scala.concurrent.duration.{ Duration, DurationInt }
 
 class UpickleSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
@@ -40,6 +40,16 @@ class UpickleSupportSpec extends WordSpec with Matchers with BeforeAndAfterAll {
       val foo = Foo("bar")
       val entity = Await.result(Marshal(foo).to[RequestEntity], 100.millis)
       Await.result(Unmarshal(entity).to[Foo], 100.millis) shouldBe foo
+    }
+
+    "not interfere with Future unwrapping for Unit" in {
+      val exceptionFromFuture = new RuntimeException
+      val failedFutureUnit = Future.failed[Unit](exceptionFromFuture)
+
+      val e = intercept[RuntimeException] {
+        Await.result(Marshal(failedFutureUnit).to[RequestEntity], 100.millis)
+      }
+      assert(e == exceptionFromFuture)
     }
   }
 
